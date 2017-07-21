@@ -1,0 +1,5 @@
+ProjectName = ''
+ProjectFilePath= ''
+CurrentDirectoryVariable=''
+RootDirectoryVariable=''
+CMakeListsPath=''
