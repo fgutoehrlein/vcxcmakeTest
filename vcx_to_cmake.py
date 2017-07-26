@@ -26,9 +26,12 @@ def findMFC():
     if MFC == 2:
         print('Found MFC option')
         cmakelists.write('set(CMAKE_MFC_FLAG 2)\n\n')
+    elif MFC == 0:
+        cmakelists.write('unset(CMAKE_MFC_FLAG)\n\n')
 
 #Search for include files
 def findIncludes():
+    includeFound=False
     pattern = re.compile("<ClCompile\sInclude=\"([^<]*)\"")
     cmakelists.write('set(SOURCE_FILES\n')
     for i, line in enumerate(open(ProjectFilePath)):
@@ -41,7 +44,7 @@ def findIncludes():
         print('Found source files')
 
             #print('Found on line %s: %s:' % (i + 1, match.groups()))
-
+    recourceFound=False
     pattern = re.compile("<ResourceCompile\sInclude=\"([^<]*)\"")
     for i, line in enumerate(open(ProjectFilePath)):
         for match in re.finditer(pattern, line):
@@ -52,7 +55,7 @@ def findIncludes():
             #print('Found on line %s: %s:' % (i + 1, match.groups()))
     if recourceFound:
         print('Found resource files')
-
+    defFileFound=False
     pattern = re.compile("<None Include=\"([^<]*)\.def\"")
     for i, line in enumerate(open(ProjectFilePath)):
         for match in re.finditer(pattern, line):
@@ -68,13 +71,13 @@ def findIncludes():
 #Add the target
 def addTarget():
     dynamic = 0
-    cmakelists.write('add_library(%s ' % (ProjectName))
     pattern = re.compile("<ConfigurationType>DynamicLibrary</ConfigurationType>")
     for i, line in enumerate(open(ProjectFilePath)):
         m = pattern.search(line)
         if m is not None:
             dynamic = 1
     if dynamic == 1:
+        cmakelists.write('\nadd_library(%s ' % (ProjectName))
         cmakelists.write('SHARED')
         print('Target added as dll')
 
@@ -86,11 +89,12 @@ def addTarget():
         if m is not None:
             static = 1
     if static == 1:
+        cmakelists.write('\nadd_library(%s ' % (ProjectName))
         cmakelists.write('STATIC')
         print('Target added as lib')
 
-    if static != 1 & dynamic !=1:
-        cmakelists.write('add_executable(%s ' %(ProjectName))
+    if static == 0 & dynamic == 0:
+        cmakelists.write('\nadd_executable(%s ' %(ProjectName))
         print('Target added as exe')
     cmakelists.write(' ${SOURCE_FILES})\n\n')
     if static ==1 & dynamic ==1:
@@ -98,6 +102,7 @@ def addTarget():
 
 #Search for dependencies
 def findDependencies():
+    dependencyFound=False
     pattern = re.compile("<ProjectReference\sInclude=\".*\\\([^<]*)\.vcxproj\"")
     cmakelists.write('add_dependencies(%s ' % (ProjectName))
     for i, line in enumerate(open(ProjectFilePath)):
@@ -105,10 +110,9 @@ def findDependencies():
             for string in match.groups():
                 foundDependency = string.replace('\\', '/')
                 dependencyFound = True
-            cmakelists.write('%s' % (foundDependency))
+            cmakelists.write('%s ' % (foundDependency))
     if dependencyFound:
         print('Found dependencies')
-        cmakelists.write(')\n')
     elif dependencyFound==False:
         pattern = re.compile("<ProjectReference\sInclude=\"([^<]*)\.vcxproj\"")
         cmakelists.write('add_dependencies(%s ' % (ProjectName))
@@ -117,9 +121,9 @@ def findDependencies():
                 for string in match.groups():
                     foundDependency = string.replace('\\', '/')
                     dependencyFound = True
-                cmakelists.write('%s' % (foundDependency))
+                cmakelists.write('%s ' % (foundDependency))
         print('Found dependencies')
-        cmakelists.write(')\n')
+    cmakelists.write(')\n')
 
 #Find preprocessor definitions
 def findCompileDefinitions():
@@ -127,7 +131,7 @@ def findCompileDefinitions():
     debugFound=False
     # Search for Debug definitions
     while(debugFound==False | endOfFile==False):
-        configPattern = re.compile("<ItemDefinitionGroup\sCondition=\"'\$\(Configuration\)\|\$\(Platform\)'=='.*(Debug\|Win32).*'\">")
+        configPattern = re.compile("<ItemDefinitionGroup\sCondition=\"'\$\(Configuration\)\|\$\(Platform\)'=='.*Debug.*Win32.*\">")
         for i, line in enumerate(open(ProjectFilePath)):
             for match in re.finditer(configPattern, line):
                 tmpLine = i
@@ -152,7 +156,7 @@ def findCompileDefinitions():
     debugFound=False
     tmpLine=0
     while(debugFound==False | endOfFile==False):
-        configPattern = re.compile("<ItemDefinitionGroup\sCondition=\"'\$\(Configuration\)\|\$\(Platform\)'=='.*(Debug\|x64).*'\">")
+        configPattern = re.compile("<ItemDefinitionGroup\sCondition=\"'\$\(Configuration\)\|\$\(Platform\)'=='.*Debug.*x64.*\">")
         for i, line in enumerate(open(ProjectFilePath)):
             for match in re.finditer(configPattern, line):
                 tmpLine = i
@@ -179,7 +183,7 @@ def findCompileDefinitions():
     tmpLine=0
     while(releaseFound==False | endOfFile==False):
         configPattern = re.compile(
-            "<ItemDefinitionGroup\sCondition=\"'\$\(Configuration\)\|\$\(Platform\)'=='.*(Release\|Win32).*'\">")
+            "<ItemDefinitionGroup\sCondition=\"'\$\(Configuration\)\|\$\(Platform\)'=='.*Release.*Win32.*\">")
         for i, line in enumerate(open(ProjectFilePath)):
             for match in re.finditer(configPattern, line):
                 tmpLine = i
@@ -205,7 +209,7 @@ def findCompileDefinitions():
     tmpLine=0
     while(releaseFound==False | endOfFile==False):
         configPattern = re.compile(
-            "<ItemDefinitionGroup\sCondition=\"'\$\(Configuration\)\|\$\(Platform\)'=='.*(Release\|x64).*'\">")
+            "<ItemDefinitionGroup\sCondition=\"'\$\(Configuration\)\|\$\(Platform\)'=='.*Release.*x64.*\">")
         for i, line in enumerate(open(ProjectFilePath)):
             for match in re.finditer(configPattern, line):
                 tmpLine = i
@@ -234,25 +238,27 @@ def findRuntimeLibrary():
     for i, line in enumerate(open(ProjectFilePath)):
         m = pattern.search(line)
         if m is not None:
-            MT = 1
-    if MT == 1:
-        cmakelists.write('#Added Multithreaded Dll')
-        cmakelists.write('\ntarget_compile_options(%s PRIVATE "$<$<CONFIG:Debug>:/MDd>" "$<$<NOT:$<CONFIG:Debug>>:/MD>")\n\n' % (ProjectName))
+            MT = 2
+    if MT == 2:
+        print('Found MD compiler Option')
+        cmakelists.write('\n#Added Multithreaded Dll')
+        cmakelists.write('\ntarget_compile_options(%s PRIVATE "/MD$<$<CONFIG:Debug>:d>")\n\n' % (ProjectName))
 
-
+    MT = 0
     pattern = re.compile("<RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>")
     for i, line in enumerate(open(ProjectFilePath)):
         m = pattern.search(line)
         if m is not None:
-            MT = 2
-    if MT == 2:
-        cmakelists.write('#Added Multithreaded')
-        cmakelists.write('\ntarget_compile_options(%s PRIVATE "$<$<CONFIG:Debug>:/MTd>" "$<$<NOT:$<CONFIG:Debug>>:/MT>")\n\n' % (ProjectName))
+            MT = 1
+    if MT == 1:
+        print('Found MT compiler Option')
+        cmakelists.write('\n#Added Multithreaded')
+        cmakelists.write('\ntarget_compile_options(%s PRIVATE "/MT$<$<CONFIG:Debug>:d>")\n\n' % (ProjectName))
 
 #Search for additional directories
 def findAdditionalDirectories():
     foundDirectories = False
-    pattern = re.compile("<AdditionalIncludeDirectories>([^<]*)\%\(AdditionalIncludeDirectories\)</AdditionalIncludeDirectories>")
+    pattern = re.compile("<AdditionalIncludeDirectories>([^<]*)</AdditionalIncludeDirectories>")
     cmakelists.write('target_include_directories(%s PRIVATE\n' % (ProjectName))
     for i, line in enumerate(open(ProjectFilePath)):
         for match in re.finditer(pattern, line):
@@ -261,12 +267,14 @@ def findAdditionalDirectories():
                 additionalDirs = string.replace('\\', '/')
                 additionalDirs = additionalDirs.replace(CurrentDirectoryVariable,'${CMAKE_CURRENT_LIST_DIR}/')
                 additionalDirs = additionalDirs.replace(RootDirectoryVariable, '${CMAKE_SOURCE_DIR}/')
+                additionalDirs = additionalDirs.replace('%(AdditionalIncludeDirectories)','')
                 additionalDirs = additionalDirs.replace(';', '"\n"')
-            cmakelists.write('"%s")\n\n' % (additionalDirs))
+            cmakelists.write('"%s"\n\n' % (additionalDirs))
         if foundDirectories:
             break
     if foundDirectories:
         print('Found additional directories')
+    cmakelists.write(')')
 
 #Search for additional libraries
 def findAdditionalLibraries():
@@ -289,6 +297,7 @@ def findAdditionalLibraries():
 
 #Search for included libraries
 def findIncludedLibraries():
+    librariesFound=False
     pattern = re.compile("<Library\sInclude=\"([^<]*)\"")
     for i, line in enumerate(open(ProjectFilePath)):
         for match in re.finditer(pattern, line):
@@ -361,6 +370,3 @@ findAdditionalDirectories()
 findAdditionalLibraries()
 findIncludedLibraries()
 findIgnoredLibraries()
-
-cmakelists.write('unset(CMAKE_MFC_FLAG)')
-
